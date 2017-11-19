@@ -40,7 +40,8 @@ lazy val sharedSettings = Seq(
   ),
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.2",
-    "org.scala-lang" % "scala-reflect" % "2.11.4"
+    "org.scala-lang" % "scala-reflect" % "2.11.7",
+    "org.scala-lang" % "scala-compiler" % "2.11.7"
   )
 )
 
