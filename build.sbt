@@ -23,7 +23,7 @@ lazy val coroutinesExtra = project
 // Settings (Shared)
 // -----------------
 lazy val sharedSettings = Seq(
-  scalaVersion := "2.11.4",
+  scalaVersion := "2.11.7",
   version := "0.8-SNAPSHOT",
   organization := "com.storm-enroute",
   scalacOptions ++= Seq(
