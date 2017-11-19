@@ -13,5 +13,5 @@ Check out the [Scala Coroutines website](http://storm-enroute.com/coroutines) fo
 
 Service            | Status | Description
 -------------------|--------|------------
-Travis             | [![Build Status](https://travis-ci.org/storm-enroute/coroutines.png?branch=master)](https://travis-ci.org/storm-enroute/coroutines) | Testing only
+Travis             | [![Build Status](https://travis-ci.org/b-studios/coroutines.png?branch=master)](https://travis-ci.org/b-studios/coroutines) | Testing only
 Maven              | [![Maven Artifact](https://img.shields.io/maven-central/v/com.storm-enroute/coroutines_2.11.svg)](http://mvnrepository.com/artifact/com.storm-enroute/coroutines_2.11) | Coroutines artifact on Maven
