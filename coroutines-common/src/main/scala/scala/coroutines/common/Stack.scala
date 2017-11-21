@@ -21,11 +21,11 @@ import scala.reflect.macros.whitebox.Context
  *
  * In particular those variables will be sometimes re-assigned. They
  * are expected to be *named* references, not *values. That is,
- * a the call
+ * the call
  *
  *     copy(foo, bar)
  *
- * is valid, and the references foo, fooptr, bar and barptr are
+ * is valid, and the references `foo`, `fooptr`, `bar` and `barptr` are
  * expected to exist. In contrast
  *
  *     copy(new Array(), new Array())
