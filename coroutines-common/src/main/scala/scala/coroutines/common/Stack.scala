@@ -75,7 +75,6 @@ object Stack {
     val stackptrname = TermName(s"${name}ptr")
     val stackptr = q"$path.$stackptrname"
     val tpe = implicitly[WeakTypeTag[T]]
-    val valnme = TermName(c.freshName())
     q"""
       _root_.org.coroutines.common.Stack.init[$tpe]($stack, $size)
       $stackptr += $n
