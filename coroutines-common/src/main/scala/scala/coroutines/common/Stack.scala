@@ -34,7 +34,9 @@ import scala.reflect.macros.whitebox.Context
  *
  * Stacks are initialized on demand, that is: each method first
  * calls initMacro to check whether the stack needs to be created.
- * Here, `size` specifies size of the stack for initialization.
+ *
+ * Here, `size` specifies size of the stack for initialization. If
+ * `-1` is passed as size, initialization is skipped.
  */
 object Stack {
   def init[T](stack: Array[T], size: Int): Unit = macro initMacro[T]
