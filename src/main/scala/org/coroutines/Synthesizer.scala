@@ -131,7 +131,7 @@ with AstCanonicalization[C] {
       }
     }
     val returnstores = cfg.start.dfs.collect {
-      case n @ Node.ApplyCoroutine(_, _, _) => genReturnValueStore(n)
+      case n : Node.ApplyCoroutine => genReturnValueStore(n)
     }
 
     val returnvaluemethod = returnValueMethodName(tpe)

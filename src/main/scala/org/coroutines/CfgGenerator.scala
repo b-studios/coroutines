@@ -181,14 +181,13 @@ trait CfgGenerator[C <: Context] {
     ) extends Node {
       var elseSuccessor: Option[Node] = None
       def successors = (successor ++ elseSuccessor).toSeq
-      override def code = {
-        val q"if ($cond) $_ else $_" = tree
-        cond
+      lazy val cond = tree match {
+        case q"if ($cond) $_ else $_" => cond
       }
+      override def code = cond
       def emit(z: Zipper, seen: mutable.Set[Node], subgraph: SubCfg)(
         implicit cc: CanCall, table: Table
       ): Zipper = {
-        val q"if ($cond) $_ else $_" = tree
         val newZipper = Zipper(null, Nil, trees => q"..$trees")
         val newSeen = subgraph.all.get(enduid) match {
           case Some(end) => mutable.Set(end)
@@ -628,14 +627,21 @@ trait CfgGenerator[C <: Context] {
         """
       }
     }
+    object ApplyCoroutine {
+      def unapply(t: Tree): Option[(Tree, List[Tree])] = t match {
+        case q"$_ val $_ = $c.apply(..$args)" if isCoroutineDefMarker(c.tpe) => Some((c, args))
+        case q"$_ var $_ = $c.apply(..$args)" if isCoroutineDefMarker(c.tpe) => Some((c, args))
+        case q"$_ val $_: $_ = $c.apply[..$_](..$args)(..$_)" if isCoroutineDefMarker(c.tpe) => Some((c, args))
+        case q"$_ var $_: $_ = $c.apply[..$_](..$args)(..$_)" if isCoroutineDefMarker(c.tpe) => Some((c, args))
+        case _ => None
+      }
+    }
 
     case class YieldVal(
       tree: Tree, chain: Chain, uid: Long
     ) extends Node {
-      lazy val arg = tree match {
-        case q"$_ val $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-        case q"$_ var $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-      }
+
+      lazy val YieldVal(arg) = tree
 
       def successors = successor.toSeq
       override def code = arg
@@ -668,15 +674,19 @@ trait CfgGenerator[C <: Context] {
       }
       def copyWithoutSuccessors(nch: Chain) = YieldVal(tree, nch, uid)
     }
+    object YieldVal {
+      def unapply(t: Tree): Option[Tree] = t match {
+        case q"$_ val $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => Some(x)
+        case q"$_ var $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => Some(x)
+        case _ => None
+      }
+    }
 
     case class YieldTo(
       tree: Tree, chain: Chain, uid: Long
     ) extends Node {
 
-      lazy val coroutine = tree match {
-        case q"$_ val $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-        case q"$_ var $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-      }
+      lazy val YieldTo(coroutine) = tree
 
       def successors = successor.toSeq
       override def code = coroutine
@@ -712,6 +722,13 @@ trait CfgGenerator[C <: Context] {
         nthis
       }
       def copyWithoutSuccessors(nch: Chain) = YieldTo(tree, nch, uid)
+    }
+    object YieldTo {
+      def unapply(t: Tree): Option[Tree] = t match {
+        case q"$_ val $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => Some(x)
+        case q"$_ var $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => Some(x)
+        case _ => None
+      }
     }
 
     abstract class Statement extends Node {
@@ -974,7 +991,7 @@ trait CfgGenerator[C <: Context] {
         val needcheck = cfg.subgraphs.exists {
           case (_, sub) if sub.exitSubgraphs.exists(_._2 eq this) =>
             sub.exitSubgraphs.find(_._2 eq this).get._1 match {
-              case Node.ApplyCoroutine(_, _, _) => true
+              case n : Node.ApplyCoroutine => true
               case _ => false
             }
           case _ =>
@@ -1020,55 +1037,22 @@ trait CfgGenerator[C <: Context] {
   def genControlFlowGraph(args: List[Tree], body: Tree, tpt: Tree)(
     implicit table: Table
   ): Cfg = {
+
     def traverse(t: Tree, ch: Chain): (Node, Node) = {
       t match {
-        case q"$_ val $_: $_ = $qual.yieldval[$_]($_)" if isCoroutinesPkg(qual) =>
+        case Node.YieldVal(x) =>
           val nch = ch.withDecl(t, false)
           val n = Node.YieldVal(t, ch, table.newNodeUid())
           val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
           n.successor = Some(u)
           (n, u)
-        case q"$_ var $_: $_ = $qual.yieldval[$_]($_)" if isCoroutinesPkg(qual) =>
-          val nch = ch.withDecl(t, false)
-          val n = Node.YieldVal(t, ch, table.newNodeUid())
-          val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
-          n.successor = Some(u)
-          (n, u)
-        case q"$_ val $_: $_ = $qual.yieldto[$_]($_)" if isCoroutinesPkg(qual) =>
+        case Node.YieldTo(x) =>
           val nch = ch.withDecl(t, false)
           val n = Node.YieldTo(t, ch, table.newNodeUid())
           val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
           n.successor = Some(u)
           (n, u)
-        case q"$_ var $_: $_ = $qual.yieldto[$_]($_)" if isCoroutinesPkg(qual) =>
-          val nch = ch.withDecl(t, false)
-          val n = Node.YieldTo(t, ch, table.newNodeUid())
-          val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
-          n.successor = Some(u)
-          (n, u)
-        case ValDecl(t @ q"$_ val $_ = $c.apply(..$_)")
-          if isCoroutineDefMarker(c.tpe) =>
-          val nch = ch.withDecl(t, false)
-          val n = Node.ApplyCoroutine(t, ch, table.newNodeUid())
-          val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
-          n.successor = Some(u)
-          (n, u)
-        case ValDecl(t @ q"$_ var $_ = $c.apply(..$_)")
-          if isCoroutineDefMarker(c.tpe) =>
-          val nch = ch.withDecl(t, false)
-          val n = Node.ApplyCoroutine(t, ch, table.newNodeUid())
-          val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
-          n.successor = Some(u)
-          (n, u)
-        case ValDecl(t @ q"$_ val $_ = $c.apply[..$_](..$_)(..$_)")
-          if isCoroutineDefSugar(c.tpe) =>
-          val nch = ch.withDecl(t, false)
-          val n = Node.ApplyCoroutine(t, ch, table.newNodeUid())
-          val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
-          n.successor = Some(u)
-          (n, u)
-        case ValDecl(t @ q"$_ var $_ = $c.apply[..$_](..$_)(..$_)")
-          if isCoroutineDefSugar(c.tpe) =>
+        case ValDecl(t @ Node.ApplyCoroutine(co, args)) =>
           val nch = ch.withDecl(t, false)
           val n = Node.ApplyCoroutine(t, ch, table.newNodeUid())
           val u = Node.DefaultStatement(q"()", nch, table.newNodeUid())
