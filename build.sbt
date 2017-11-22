@@ -21,6 +21,7 @@ lazy val sharedSettings = Seq(
   scalaVersion := "2.11.7",
   version := "0.8-SNAPSHOT",
   organization := "com.storm-enroute",
+  initialCommands in console := """import org.coroutines._""",
   scalacOptions ++= Seq(
     "-deprecation",
     "-unchecked",
