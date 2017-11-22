@@ -15,11 +15,6 @@ lazy val coroutinesCommon = project
   .settings(moduleName := "coroutines-common")
   .settings(sharedSettings: _*)
 
-lazy val coroutinesExtra = project
-  .in(file("coroutines-extra"))
-  .settings(sharedSettings: _*)
-  .dependsOn(coroutines % "compile->compile;test->test")
-
 // Settings (Shared)
 // -----------------
 lazy val sharedSettings = Seq(
