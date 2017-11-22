@@ -19,6 +19,8 @@ trait CfgGenerator[C <: Context] {
 
   import c.universe._
 
+  private val Stack = q"_root_.org.coroutines.common.Stack"
+
   private sealed trait CanCall
 
   private object Permissions {
@@ -37,10 +39,8 @@ trait CfgGenerator[C <: Context] {
     def chain: Chain
 
     def updateBlockInfo()(implicit table: Table) {
-      for (t <- code) {
-        if (table.contains(t.symbol)) {
-          chain.info.occurrences(t.symbol) = table(t.symbol)
-        }
+      for (t <- code if table.contains(t.symbol)) {
+        chain.info.occurrences(t.symbol) = table(t.symbol)
       }
     }
 
@@ -50,8 +50,6 @@ trait CfgGenerator[C <: Context] {
      * Only used to analyze symbol occurrences in `updateBlockInfo`
      */
     def code: Tree = tree
-
-    def value: Tree = tree
 
     def isEmptyAtReturn = false
 
@@ -96,7 +94,7 @@ trait CfgGenerator[C <: Context] {
 
     protected def addSuccessorsToNodeFront(ctx: ExtractSubgraphContext) {
       // add successors to node front
-      for (s <- this.successors) if (!ctx.seenEntryPoints(s)) {
+      for (s <- this.successors if !ctx.seenEntryPoints(s)) {
         ctx.seenEntryPoints += s
         ctx.nodefront.enqueue(s)
       }
@@ -118,9 +116,8 @@ trait CfgGenerator[C <: Context] {
       }
       // update pc state
       val pc = subgraph.exitSubgraphs(this).uid
-      val pcstackset = q"""
-        _root_.org.coroutines.common.Stack.update($cparam.$$pcstack, $pc.toShort)
-      """
+      val pcstackset = q"$Stack.update($cparam.$$pcstack, $pc.toShort)"
+
       pcstackset :: stackstores.toList
     }
 
@@ -130,11 +127,11 @@ trait CfgGenerator[C <: Context] {
       val returnvaluemethod = t.returnValueMethodName
       q"""
         $$pop($cparam)
-        if (_root_.org.coroutines.common.Stack.isEmpty($cparam.$$costack)) {
+        if ($Stack.isEmpty($cparam.$$costack)) {
           $$assignresult($cparam, $untypedtree)
         } else {
           $cparam.$$target = $cparam
-          _root_.org.coroutines.common.Stack.top($cparam.$$costack)
+          $Stack.top($cparam.$$costack)
             .$returnvaluemethod($cparam, $untypedtree)
         }
         return
@@ -243,13 +240,13 @@ trait CfgGenerator[C <: Context] {
         successor match {
           case Some(s) =>
             if (successors.head.isEmptyAtReturn) {
-              val exittree = genExit(this.value, subgraph)
+              val exittree = genExit(tree, subgraph)
               z.append(exittree)
             } else {
               successors.head.markEmit(z, seen, subgraph)
             }
           case None =>
-            val exittree = genExit(this.value, subgraph)
+            val exittree = genExit(tree, subgraph)
             z.append(exittree)
         }
       }
@@ -415,14 +412,14 @@ trait CfgGenerator[C <: Context] {
         successor match {
           case Some(s) =>
             if (s.isEmptyAtReturn) {
-              val exittree = genExit(this.value, subgraph)
+              val exittree = genExit(tree, subgraph)
               z.append(exittree)
             } else {
               val z1 = z.ascend
               s.markEmit(z1, seen, subgraph)
             }
           case None =>
-            val exittree = genExit(this.value, subgraph)
+            val exittree = genExit(tree, subgraph)
             z.append(exittree)
         }
       }
@@ -537,13 +534,13 @@ trait CfgGenerator[C <: Context] {
         successor match {
           case Some(s) =>
             if (s.isEmptyAtReturn) {
-              val exittree = genExit(this.value, subgraph)
+              val exittree = genExit(tree, subgraph)
               z.append(exittree)
             } else {
               s.markEmit(z, seen, subgraph)
             }
           case None =>
-            val exittree = genExit(this.value, subgraph)
+            val exittree = genExit(tree, subgraph)
             z.append(exittree)
         }
       }
@@ -726,14 +723,14 @@ trait CfgGenerator[C <: Context] {
         successor match {
           case Some(s) =>
             if (s.isEmptyAtReturn) {
-              val exittree = genExit(this.value, subgraph)
+              val exittree = genExit(tree, subgraph)
               z.append(exittree)
             } else {
               val z1 = z.append(table.untyper.untypecheck(tree))
               s.markEmit(z1, seen, subgraph)
             }
           case None =>
-            val exittree = genExit(this.value, subgraph)
+            val exittree = genExit(tree, subgraph)
             z.append(exittree)
         }
       }
@@ -776,7 +773,6 @@ trait CfgGenerator[C <: Context] {
     case class Decl(
       tree: Tree, chain: Chain, uid: Long
     ) extends Statement {
-      override def value = q"()"
       override def code: Tree = tree match {
         case q"$_ val $_: $_ = $rhs" => rhs
         case q"$_ var $_: $_ = $rhs" => rhs
@@ -1013,7 +1009,7 @@ trait CfgGenerator[C <: Context] {
           case t: _root_.java.lang.Throwable =>
             $cparam.$$exception = t
             $$pop($cparam)
-            if (!_root_.org.coroutines.common.Stack.isEmpty($cparam.$$costack)) {
+            if (!$Stack.isEmpty($cparam.$$costack)) {
               $cparam.$$target = $cparam
             }
         }

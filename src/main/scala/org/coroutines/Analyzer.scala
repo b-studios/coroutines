@@ -21,10 +21,10 @@ trait Analyzer[C <: Context] {
     def isRoot = above == null
     def result: Tree = {
       var z = this
-      while (z.above != null) z = z.ascend
+      while (!z.isRoot) z = z.ascend
       z.ctor(z.left.reverse)
     }
-    def ascend: Zipper = if (above == null) sys.error("cannot ascend") else {
+    def ascend: Zipper = if (isRoot) sys.error("cannot ascend") else {
       Zipper(above.above, ctor(left.reverse) :: above.left, above.ctor)
     }
     def descend(ctor: List[Tree] => Tree) = Zipper(this, Nil, ctor)
