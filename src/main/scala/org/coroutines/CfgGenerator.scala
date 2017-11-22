@@ -46,6 +46,9 @@ trait CfgGenerator[C <: Context] {
 
     def copyWithoutSuccessors(nch: Chain): Node
 
+    /**
+     * Only used to analyze symbol occurrences in `updateBlockInfo`
+     */
     def code: Tree = tree
 
     def value: Tree = tree
@@ -575,7 +578,6 @@ trait CfgGenerator[C <: Context] {
         case q"$_ val $_: $_ = $co.apply[..$_](..$args)(..$_)" => (co, args)
       }
       def successors = successor.toSeq
-      def coroutine: Tree = co
       override def code: Tree = {
         q"""
           $co
@@ -633,25 +635,21 @@ trait CfgGenerator[C <: Context] {
     case class YieldVal(
       tree: Tree, chain: Chain, uid: Long
     ) extends Node {
-      def successors = successor.toSeq
-      override def code = {
-        tree match {
-          case q"$_ val $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-          case q"$_ var $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-        }
+      lazy val arg = tree match {
+        case q"$_ val $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
+        case q"$_ var $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
       }
+
+      def successors = successor.toSeq
+      override def code = arg
       def emit(z: Zipper, seen: mutable.Set[Node], subgraph: SubCfg)(
         implicit cc: CanCall, table: Table
       ): Zipper = {
-        val x = tree match {
-          case q"$_ val $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-          case q"$_ var $_: $_ = $qual.yieldval[$_]($x)" if isCoroutinesPkg(qual) => x
-        }
         val cparam = table.names.coroutineParam
         val savestate = genSaveState(subgraph)
         val exittree = q"""
           ..$savestate
-          $$assignyield($cparam, ${table.untyper.untypecheck(x)})
+          $$assignyield($cparam, ${table.untyper.untypecheck(arg)})
           return
         """
         val z1 = z.append(exittree)
@@ -677,21 +675,18 @@ trait CfgGenerator[C <: Context] {
     case class YieldTo(
       tree: Tree, chain: Chain, uid: Long
     ) extends Node {
-      def successors = successor.toSeq
-      override def code = {
-        tree match {
-          case q"$_ val $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-          case q"$_ var $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-        }
+
+      lazy val coroutine = tree match {
+        case q"$_ val $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
+        case q"$_ var $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
       }
+
+      def successors = successor.toSeq
+      override def code = coroutine
       def emit(z: Zipper, seen: mutable.Set[Node], subgraph: SubCfg)(
         implicit cc: CanCall, t: Table
       ): Zipper = {
-        val co = tree match {
-          case q"$_ val $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-          case q"$_ var $_: $_ = $qual.yieldto[$_]($x)" if isCoroutinesPkg(qual) => x
-        }
-        val untypedco = t.untyper.untypecheck(co)
+        val untypedco = t.untyper.untypecheck(coroutine)
         val cparam = t.names.coroutineParam
         val savestate = genSaveState(subgraph)
         val exittree = q"""
