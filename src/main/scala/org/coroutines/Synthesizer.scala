@@ -385,6 +385,8 @@ with AstCanonicalization[C] {
     co
   }
 
+  def handle[R: WeakTypeTag](prompt: Tree, prog: Tree): Tree = ???
+
   def call[R: WeakTypeTag](tree: Tree): Tree = {
     val (receiver, args) = tree match {
       case q"$r.apply(..$args)" =>

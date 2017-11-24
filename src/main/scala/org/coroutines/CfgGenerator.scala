@@ -566,6 +566,39 @@ trait CfgGenerator[C <: Context] {
       def copyWithoutSuccessors(nch: Chain) = TryBlockEnd(nch, uid)
     }
 
+    case class Handle(
+      tree: Tree, chain: Chain, uid: Long
+    ) extends Node {
+
+      val (prompt, body) = tree match {
+        case q"$_ val $_: $_ = $qual.handle[$_]($p, $x)" if isCoroutinesPkg(qual) => (p, x)
+        case q"$_ var $_: $_ = $qual.handle[$_]($p, $x)" if isCoroutinesPkg(qual) => (p, x)
+      }
+
+      override def code = {
+        q"""
+          $prompt
+
+          $body
+        """
+      }
+
+      def successors = successor.toSeq
+
+      def emit(z: Zipper, seen: mutable.Set[Node], subgraph: SubCfg)(
+        implicit cc: CanCall, table: Table
+      ): Zipper = {
+        z.append(q"""println("hello handle")""")
+      }
+
+      def extract(
+        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        subgraph: SubCfg
+      )(implicit table: Table): Node = ???
+
+      def copyWithoutSuccessors(nch: Chain) = Handle(tree, nch, uid)
+    }
+
     case class ApplyCoroutine(
       tree: Tree, chain: Chain, uid: Long
     ) extends Node {

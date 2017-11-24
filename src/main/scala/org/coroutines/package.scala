@@ -10,6 +10,8 @@ import scala.reflect.macros.whitebox.Context
 
 package object coroutines {
 
+  // Add handle, use and run here.
+
   val COROUTINE_DIRECT_APPLY_ERROR_MESSAGE =
     "Coroutines can only be invoked directly from within other coroutines. " +
     "Use `call(<coroutine>(<arg0>, ..., <argN>))` instead if you want to " +
@@ -28,6 +30,9 @@ package object coroutines {
   def call[R](f: R): Any = macro Coroutine.call[R]
 
   def coroutine[Y, R](f: Any): Any = macro Coroutine.synthesize
+
+  // should be Effectful[R] => Effectful[R]
+  def handle[R](prompt: Any, prog: R): R = macro Coroutine.handle[R]
 
   /* syntax sugar */
 

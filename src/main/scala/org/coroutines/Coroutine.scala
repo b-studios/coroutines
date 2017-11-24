@@ -321,6 +321,10 @@ object Coroutine {
     new Synthesizer[c.type](c).call(f)
   }
 
+  def handle[T: c.WeakTypeTag](c: Context)(prompt: c.Tree, prog: c.Tree): c.Tree = {
+    new Synthesizer[c.type](c).handle(prompt, prog)
+  }
+
   abstract class _0[@specialized T, R] extends Coroutine[T, R] {
     def apply(): R
     def $call(): Instance[T, R]
