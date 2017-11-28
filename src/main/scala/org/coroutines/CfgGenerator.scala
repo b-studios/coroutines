@@ -36,7 +36,7 @@ trait CfgGenerator[C <: Context] {
 
     val tree: Tree
 
-    def chain: Chain
+    def chain: ScopeChain
 
     def updateBlockInfo()(implicit table: Table) {
       for (t <- code if table.contains(t.symbol)) {
@@ -44,7 +44,7 @@ trait CfgGenerator[C <: Context] {
       }
     }
 
-    def copyWithoutSuccessors(nch: Chain): Node
+    def copyWithoutSuccessors(nch: ScopeChain): Node
 
     /**
      * Only used to analyze symbol occurrences in `updateBlockInfo`
@@ -88,7 +88,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     def extract(
-      prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+      prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
       subgraph: SubCfg
     )(implicit table: Table): Node
 
@@ -124,7 +124,7 @@ trait CfgGenerator[C <: Context] {
     protected def genExit(value: Tree, subgraph: SubCfg)(implicit t: Table): Tree = {
       val cparam = t.names.coroutineParam
       val untypedtree = t.untyper.untypecheck(value)
-      val returnvaluemethod = t.returnValueMethodName
+      val returnvaluemethod = t.names.returnValueMethod
       q"""
         $$pop($cparam)
         if ($Stack.isEmpty($cparam.$$costack)) {
@@ -177,7 +177,7 @@ trait CfgGenerator[C <: Context] {
 
   object Node {
     case class If(
-      enduid: Long, tree: Tree, chain: Chain, uid: Long
+      enduid: Long, tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
       var elseSuccessor: Option[Node] = None
       def successors = (successor ++ elseSuccessor).toSeq
@@ -206,7 +206,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.descend()
@@ -225,11 +225,11 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = If(enduid, tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = If(enduid, tree, nch, uid)
     }
 
     case class IfEnd(
-      chain: Chain, uid: Long
+      chain: ScopeChain, uid: Long
     ) extends Node {
       val tree: Tree = q""
       def successors = successor.toSeq
@@ -250,7 +250,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.parent
@@ -269,7 +269,7 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = IfEnd(nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = IfEnd(nch, uid)
       override def isEmptyAtReturn = successor match {
         case None => true
         case Some(s) => s.isEmptyAtReturn
@@ -277,7 +277,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     case class While(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
       override def code = {
         val q"while ($cond) $_" = tree
@@ -299,7 +299,7 @@ trait CfgGenerator[C <: Context] {
         endnode.markEmit(z2, seen, subgraph)
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.descend()
@@ -318,11 +318,11 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = While(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = While(tree, nch, uid)
     }
 
     case class WhileEnd(
-      chain: Chain, uid: Long
+      chain: ScopeChain, uid: Long
     ) extends Node {
       val tree: Tree = q""
       var whileSuccessor: Option[Node] = None
@@ -344,7 +344,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.parent
@@ -366,11 +366,11 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = WhileEnd(nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = WhileEnd(nch, uid)
     }
 
     case class CodeBlock(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
       override def code = q""
       def successors = successor.toSeq
@@ -381,7 +381,7 @@ trait CfgGenerator[C <: Context] {
         successor.get.markEmit(z1, seen, subgraph)
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.descend()
@@ -397,11 +397,11 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = CodeBlock(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = CodeBlock(tree, nch, uid)
     }
 
     case class CodeBlockEnd(
-      chain: Chain, uid: Long
+      chain: ScopeChain, uid: Long
     ) extends Node {
       val tree: Tree = q""
       def successors = successor.toSeq
@@ -423,7 +423,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.parent
@@ -446,11 +446,11 @@ trait CfgGenerator[C <: Context] {
         case None => true
         case Some(s) => s.isEmptyAtReturn
       }
-      def copyWithoutSuccessors(nch: Chain) = CodeBlockEnd(nch , uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = CodeBlockEnd(nch , uid)
     }
 
     case class TryBlock(
-      enduid: Long, tree: Tree, catchTree: Option[Tree], chain: Chain, uid: Long
+      enduid: Long, tree: Tree, catchTree: Option[Tree], chain: ScopeChain, uid: Long
     ) extends Node {
       override def code = q""
       var finallySuccessor: Option[Node] = None
@@ -483,7 +483,7 @@ trait CfgGenerator[C <: Context] {
         subgraph.all(enduid).markEmit(z1, seen, subgraph)
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.descend(Some((uid, enduid)))
@@ -517,12 +517,12 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) =
+      def copyWithoutSuccessors(nch: ScopeChain) =
         TryBlock(enduid, tree, catchTree, nch, uid)
     }
 
     case class TryBlockEnd(
-      chain: Chain, uid: Long
+      chain: ScopeChain, uid: Long
     ) extends Node {
       val tree: Tree = q""
       override def code = q""
@@ -544,7 +544,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.parent
@@ -563,11 +563,11 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = TryBlockEnd(nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = TryBlockEnd(nch, uid)
     }
 
     case class Handle(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
 
       val (prompt, body) = tree match {
@@ -592,15 +592,15 @@ trait CfgGenerator[C <: Context] {
       }
 
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = ???
 
-      def copyWithoutSuccessors(nch: Chain) = Handle(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = Handle(tree, nch, uid)
     }
 
     case class ApplyCoroutine(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
       val (co, args) = tree match {
         case q"$_ val $_: $_ = $co.apply(..$args)" => (co, args)
@@ -621,7 +621,7 @@ trait CfgGenerator[C <: Context] {
         z.append(exittree)
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.withDecl(tree, false)
@@ -634,7 +634,7 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = ApplyCoroutine(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = ApplyCoroutine(tree, nch, uid)
       override def stackVars(sub: SubCfg) = {
         val chainVars = storePointVarsInChain(sub).map(_._1)
         if (tree.symbol.info != typeOf[Unit]) tree.symbol :: chainVars
@@ -671,7 +671,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     case class YieldVal(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
 
       lazy val YieldVal(arg) = tree
@@ -693,7 +693,7 @@ trait CfgGenerator[C <: Context] {
       }
       override def stackVars(sub: SubCfg) = storePointVarsInChain(sub).map(_._1)
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nthis = this.copyWithoutSuccessors(prevchain)
@@ -705,7 +705,7 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = YieldVal(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = YieldVal(tree, nch, uid)
     }
     object YieldVal {
       def unapply(t: Tree): Option[Tree] = t match {
@@ -716,7 +716,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     case class YieldTo(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Node {
 
       lazy val YieldTo(coroutine) = tree
@@ -742,7 +742,7 @@ trait CfgGenerator[C <: Context] {
       }
       override def stackVars(sub: SubCfg) = storePointVarsInChain(sub).map(_._1)
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nthis = this.copyWithoutSuccessors(prevchain)
@@ -754,7 +754,7 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = YieldTo(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = YieldTo(tree, nch, uid)
     }
     object YieldTo {
       def unapply(t: Tree): Option[Tree] = t match {
@@ -787,7 +787,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     case class DefaultStatement(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Statement {
       override def updateBlockInfo()(implicit table: Table) {
         super.updateBlockInfo()
@@ -798,7 +798,7 @@ trait CfgGenerator[C <: Context] {
         }
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nthis = this.copyWithoutSuccessors(prevchain)
@@ -816,12 +816,12 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) =
+      def copyWithoutSuccessors(nch: ScopeChain) =
         DefaultStatement(tree, nch, uid)
     }
 
     case class Decl(
-      tree: Tree, chain: Chain, uid: Long
+      tree: Tree, chain: ScopeChain, uid: Long
     ) extends Statement {
       override def code: Tree = tree match {
         case q"$_ val $_: $_ = $rhs" => rhs
@@ -832,7 +832,7 @@ trait CfgGenerator[C <: Context] {
         chain.info.decls(tree.symbol) = table(tree.symbol)
       }
       def extract(
-        prevchain: Chain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
+        prevchain: ScopeChain, seen: mutable.Map[Node, Node], ctx: ExtractSubgraphContext,
         subgraph: SubCfg
       )(implicit table: Table): Node = {
         val nchain = prevchain.withDecl(tree, false)
@@ -851,7 +851,7 @@ trait CfgGenerator[C <: Context] {
 
         nthis
       }
-      def copyWithoutSuccessors(nch: Chain) = Decl(tree, nch, uid)
+      def copyWithoutSuccessors(nch: ScopeChain) = Decl(tree, nch, uid)
     }
   }
 
@@ -932,7 +932,7 @@ trait CfgGenerator[C <: Context] {
       isLoaded(exitSubgraphs(n), mutable.Set())
     }
 
-    val declarationBlockFrom: Cache._2[Symbol, Chain, BlockInfo] = cached {
+    val declarationBlockFrom: Cache._2[Symbol, ScopeChain, BlockInfo] = cached {
       (s, chain) =>
       chain.ancestors.find(_.decls.toMap.contains(s)).get.info
     }
@@ -953,7 +953,7 @@ trait CfgGenerator[C <: Context] {
       }
     }
 
-    val mustLoadVar: Cache._2[Symbol, Chain, Boolean] = cached {
+    val mustLoadVar: Cache._2[Symbol, ScopeChain, Boolean] = cached {
       (sym, chain) =>
       val isVisible = chain.contains(sym)
       val isOccurring = isOccurringInBlockDescendants(sym, chain.info)
@@ -966,7 +966,7 @@ trait CfgGenerator[C <: Context] {
       /** Patches the CFG with declaration nodes and code block nodes to lift the scope.
        *  Returns the patched node, and whether or not the exception check was added.
        */
-      def patch(n: Node, chain: Chain, checkthrow: Option[Tree]): (Node, Boolean) = {
+      def patch(n: Node, chain: ScopeChain, checkthrow: Option[Tree]): (Node, Boolean) = {
         val head = chain.info.tryuids match {
           case Some((tryuid, enduid)) =>
             cfg.allnodes(tryuid).copyWithoutSuccessors(chain)
@@ -1071,7 +1071,7 @@ trait CfgGenerator[C <: Context] {
     implicit table: Table
   ): Cfg = {
 
-    def traverse(t: Tree, ch: Chain): (Node, Node) = {
+    def traverse(t: Tree, ch: ScopeChain): (Node, Node) = {
       t match {
         case Node.YieldVal(x) =>
           val nch = ch.withDecl(t, false)
@@ -1175,7 +1175,7 @@ trait CfgGenerator[C <: Context] {
     }
 
     // add arguments to symbol table
-    val bodyChain = args.foldLeft(table.topChain: Chain) { (ch, t) =>
+    val bodyChain = args.foldLeft(table.topChain: ScopeChain) { (ch, t) =>
       val q"$_ val $name: $_ = $_" = t
       ch.withDecl(t, true)
     }

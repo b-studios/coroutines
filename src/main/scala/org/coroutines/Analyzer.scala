@@ -192,16 +192,15 @@ trait Analyzer[C <: Context] {
     val returnType = inferReturnType(body)
 
     // the "top-level" scope for this coroutine.
-    val topChain = Chain(new BlockInfo(None), Nil, this, null)
+    val topChain = ScopeChain(new BlockInfo(None), Nil, this, null)
 
     val untyper = ByTreeUntyper(c)(lambda)
 
     def initialStackSize: Int = 4
 
-    // Fix this! These are both names
-    val returnValueMethodName = Analyzer.this.returnValueMethodName(returnType.tpe)
     object names {
       val coroutineParam = TermName(c.freshName())
+      val returnValueMethod = Analyzer.this.returnValueMethodName(returnType.tpe)
     }
 
     // fresh names
@@ -249,8 +248,8 @@ trait Analyzer[C <: Context] {
     }
   }
 
-  case class Chain(
-    info: BlockInfo, decls: List[(Symbol, VarInfo)], table: Table, parent: Chain
+  case class ScopeChain(
+    info: BlockInfo, decls: List[(Symbol, VarInfo)], table: Table, parent: ScopeChain
   ) {
     def alldecls: List[(Symbol, VarInfo)] = {
       decls ::: (if (parent != null) parent.alldecls else Nil)
@@ -258,15 +257,15 @@ trait Analyzer[C <: Context] {
     def contains(s: Symbol): Boolean = {
       decls.exists(_._1 == s) || (parent != null && parent.contains(s))
     }
-    def ancestors: List[Chain] = {
+    def ancestors: List[ScopeChain] = {
       if (parent != null) this :: parent.ancestors else this :: Nil
     }
-    def chainForDecl(s: Symbol): Option[Chain] = {
+    def chainForDecl(s: Symbol): Option[ScopeChain] = {
       if (decls.exists(_._1 == s)) Some(this)
       else if (parent != null) parent.chainForDecl(s)
       else None
     }
-    def isDescendantOf(that: Chain): Boolean = {
+    def isDescendantOf(that: ScopeChain): Boolean = {
       (this.info == that.info && this.decls.length >= that.decls.length) ||
         (parent != null && parent.isDescendantOf(that))
     }
@@ -288,7 +287,7 @@ trait Analyzer[C <: Context] {
     def isOccurringInAncestors(s: Symbol): Boolean = {
       isOccurring(s) || (parent != null && parent.isOccurringInAncestors(s))
     }
-    def withDecl(valdef: Tree, isArg: Boolean): Chain = {
+    def withDecl(valdef: Tree, isArg: Boolean): ScopeChain = {
       val sym = valdef.symbol
       val varinfo = table.vars.get(sym) match {
         case Some(varinfo) =>
@@ -297,14 +296,14 @@ trait Analyzer[C <: Context] {
           new VarInfo(table.newVarUid, valdef, sym, isArg, table)
       }
       table.vars(sym) = varinfo
-      Chain(info, (sym, varinfo) :: decls, table, parent)
+      ScopeChain(info, (sym, varinfo) :: decls, table, parent)
     }
-    def takeDecls(n: Int) = Chain(info, decls.take(n), table, parent)
+    def takeDecls(n: Int) = ScopeChain(info, decls.take(n), table, parent)
     def descend(tryuids: Option[(Long, Long)] = None) =
-      Chain(new BlockInfo(tryuids), Nil, table, this)
-    def copyWithoutBlocks: Chain = {
+      ScopeChain(new BlockInfo(tryuids), Nil, table, this)
+    def copyWithoutBlocks: ScopeChain = {
       val nparent = if (parent == null) null else parent.copyWithoutBlocks
-      Chain(info.copyWithoutVars, decls, table, nparent)
+      ScopeChain(info.copyWithoutVars, decls, table, nparent)
     }
     override def equals(that: Any) = that match {
       case that: AnyRef => this eq that
