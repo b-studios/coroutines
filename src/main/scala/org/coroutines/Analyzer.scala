@@ -180,36 +180,55 @@ trait Analyzer[C <: Context] {
     override def toString = s"VarInfo($uid, $sym)"
   }
 
+  // Contains MetaData for a coroutine, represented by `lambda`
   class Table(private val lambda: Tree) {
+
+    // the underlying lambda for the current coroutine
+    // extracts body and args to members of the Table-class
     val q"(..$args) => $body" = lambda
+
+    // infer the types of the coroutine by inspecting the body source code
     val yieldType = inferYieldType(body)
     val returnType = inferReturnType(body)
-    val returnValueMethodName = Analyzer.this.returnValueMethodName(returnType.tpe)
-    private var varCount = 0
-    private var nodeCount = 0L
-    private var subgraphCount = 0L
-    val vars = mutable.LinkedHashMap[Symbol, VarInfo]()
+
+    // the "top-level" scope for this coroutine.
     val topChain = Chain(new BlockInfo(None), Nil, this, null)
-    val untyper = new ByTreeUntyper[c.type](c)(lambda)
+
+    val untyper = ByTreeUntyper(c)(lambda)
+
     def initialStackSize: Int = 4
+
+    // Fix this! These are both names
+    val returnValueMethodName = Analyzer.this.returnValueMethodName(returnType.tpe)
     object names {
       val coroutineParam = TermName(c.freshName())
     }
+
+    // fresh names
+    // -----------
+    private var varCount = 0
     def newVarUid(): Int = {
       val c = varCount
       varCount += 1
       c
     }
+
+    private var nodeCount = 0L
     def newNodeUid(): Long = {
       val c = nodeCount
       nodeCount += 1
       c
     }
+
+    private var subgraphCount = 0L
     def newSubgraphUid(): Long = {
       val c = subgraphCount
       subgraphCount += 1
       c
     }
+
+    // probably ALL variables defined(?) or used(?) in the coroutine.
+    val vars = mutable.LinkedHashMap[Symbol, VarInfo]()
     def foreach[U](f: ((Symbol, VarInfo)) => U): Unit = vars.foreach(f)
     def contains(s: Symbol) = vars.contains(s)
     def apply(s: Symbol) = vars(s)
